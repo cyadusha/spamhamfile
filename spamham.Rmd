@@ -1,0 +1,109 @@
+---
+title: "spamham"
+output: html_document
+---
+
+```{r}
+library(tm)
+library(RTextTools)
+library(SnowballC)
+```
+
+```{r}
+preprocess = function(basicdir, fileloc){
+  full = paste0(basicdir, fileloc)
+  everything = DirSource(full, encoding = "UTF-8", recursive = T)
+  corpus = Corpus(everything, readerControl = list(reader = readPlain, language = "en"))
+  corpus = tm_map(corpus, removePunctuation) #remove punctuation marks
+  corpus = tm_map(corpus, removeNumbers) #remove numbers
+  corpus = tm_map(corpus, stemDocument) 
+  corpus = tm_map(corpus, removeWords, stopwords("english")) #remove stopwords
+  corpus = tm_map(corpus, stripWhitespace) #remove white space
+  corpus = tm_map(corpus, content_transformer(tolower)) #remove uppers
+  corpus = tm_map(corpus, PlainTextDocument)
+  corpus
+}
+```
+
+```{r}
+basicdir = "C:/Users/Yadu/Downloads"
+fileloc1 = "/spam"
+fileloc2 = "/spam_2"
+fileloc3 = "/hard_ham"
+fileloc4 = "/easy_ham"
+fileloc5 = "/easy_ham_2"
+```
+
+```{r}
+#preprocessing
+corpusspam = preprocess(basicdir, fileloc1)
+corpusspam2 = preprocess(basicdir, fileloc2)
+corpushard = preprocess(basicdir, fileloc3)
+corpuseasy = preprocess(basicdir, fileloc4)
+corpuseasy2 = preprocess(basicdir, fileloc5)
+
+#Without these following commands, we would get wrong results for the svm probabilities, tree probabilities, and the maximum entropy probabilities. The svm probabilities and tree probabilities would all be the same. 
+corpusspam = tm_map(corpusspam, PlainTextDocument)
+corpusspam2 = tm_map(corpusspam2, PlainTextDocument)
+corpushard = tm_map(corpushard, PlainTextDocument)
+corpuseasy = tm_map(corpuseasy, PlainTextDocument)
+corpuseasy2 = tm_map(corpuseasy2, PlainTextDocument)
+```
+
+```{r}
+#add meta labels
+meta(corpusspam, tag = "type") = "spam"
+meta(corpusspam2, tag = "type") = "spam"
+meta(corpushard, tag = "type") = "ham"
+meta(corpuseasy, tag = "type") = "ham"
+meta(corpuseasy2, tag = "type") = "ham"
+```
+
+```{r}
+combinedtrainingset = c(corpusspam, corpusspam2, corpushard, corpuseasy, corpuseasy2, recursive = T) #combine all data
+combinedtrainingsample = sample(combinedtrainingset) #randomize all data
+```
+
+```{r}
+documentemail = DocumentTermMatrix(combinedtrainingsample)
+documentemail = removeSparseTerms(documentemail, 0.002) #remove sparse terms so there will be 0.02 percent of empty space in matrix.
+```
+
+```{r}
+kind = unlist(meta(combinedtrainingsample, "type")[,1])
+head(kind)
+```
+
+```{r}
+set.seed(2000) #reproducible results
+
+#prepare container
+N = length(kind)
+container = create_container(documentemail, labels = kind, trainSize = 1:(0.02*N), testSize = ((0.02*N)+1):N, virgin = F)
+slotNames(container)
+```
+
+```{r}
+maxent_model = train_model(container, "MAXENT")
+tree_model = train_model(container, "TREE")
+svm_model = train_model(container, "SVM")
+```
+
+```{r}
+maxent_out = classify_model(container, maxent_model)
+tree_out = classify_model(container, tree_model)
+svm_out = classify_model(container, svm_model)
+```
+
+
+```{r}
+head(maxent_out)
+```
+
+```{r}
+head(tree_out)
+```
+
+```{r}
+head(svm_out)
+```
